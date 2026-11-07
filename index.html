@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>DS Log Baixa</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2312805c'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<!--
+  Baixa pela web (DS Log / Rota Leve): só para dar a baixa e ver as fotos grandes.
+  Usa a mesma conta do app (Supabase, e-mail e senha). A chave abaixo é a PÚBLICA (publishable),
+  a mesma que vai no APK; cada pessoa só vê os próprios dados por causa do RLS do banco.
+-->
+<style>
+  :root {
+    --bg: #f4f6f5; --card: #ffffff; --fg: #14201a; --muted: #5d6b63; --line: #dfe5e1;
+    --accent: #12805c; --accent-fg: #ffffff; --accent-soft: #e3f3ec;
+    --warn: #b3261e; --warn-soft: #fbe9e7; --done: #6b7a72; --shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1311; --card: #1a201d; --fg: #e8eee9; --muted: #9aa8a0; --line: #2b332f;
+      --accent: #5fcf9c; --accent-fg: #06291b; --accent-soft: #17352a;
+      --warn: #ff8a80; --warn-soft: #3a1f1d; --done: #8b9a92; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1311; --card: #1a201d; --fg: #e8eee9; --muted: #9aa8a0; --line: #2b332f;
+    --accent: #5fcf9c; --accent-fg: #06291b; --accent-soft: #17352a;
+    --warn: #ff8a80; --warn-soft: #3a1f1d; --done: #8b9a92; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body { font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+  button, input, select { font: inherit; color: inherit; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 16px 16px 96px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  .hidden { display: none !important; }
+
+  /* Login */
+  .login { max-width: 400px; margin: 10vh auto 0; background: var(--card); border-radius: 20px; padding: 24px; box-shadow: var(--shadow); }
+  .login h1 { margin-bottom: 4px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 14px 0 6px; }
+  input[type=email], input[type=password], select {
+    width: 100%; padding: 13px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg);
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 12px;
+    padding: 12px 16px; font-weight: 650; cursor: pointer; background: var(--accent-soft); color: var(--fg); min-height: 46px; }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); }
+  .btn.block { width: 100%; margin-top: 18px; }
+  .btn.ghost { background: transparent; border: 1px solid var(--line); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .err { color: var(--warn); font-size: 14px; margin-top: 12px; min-height: 1em; }
+
+  /* Topo */
+  .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .top .grow { flex: 1; min-width: 0; }
+  .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--card); padding: 12px;
+    border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 14px; }
+  .bar select { flex: 1 1 240px; width: auto; }
+  .count { font-variant-numeric: tabular-nums; font-weight: 650; }
+  .progress { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 6px 0 0; }
+  .progress > i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .chk { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; user-select: none; }
+  .chk input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+  /* Pacotes */
+  .group { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 4px 8px; }
+  .pkg { background: var(--card); border-radius: 18px; padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow);
+    border: 2px solid transparent; scroll-margin-top: 16px; }
+  .pkg.current { border-color: var(--accent); }
+  .pkg.isdone { opacity: .62; }
+  .pkg-head { display: flex; gap: 10px; align-items: flex-start; }
+  .pkg-head .grow { flex: 1; min-width: 0; }
+  .num { font-size: 19px; font-weight: 700; word-break: break-all; }
+  .addr { font-size: 14px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; white-space: nowrap; }
+  .tag.ok { background: var(--accent-soft); color: var(--accent); }
+  .tag.fail { background: var(--warn-soft); color: var(--warn); }
+  .tag.baixado { background: var(--line); color: var(--done); }
+  .recv { margin-top: 8px; font-size: 15px; }
+  .code { margin-top: 14px; background: #fff; border-radius: 14px; padding: 14px; text-align: center; color: #000; }
+  .code svg, .code img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  .code .qr { width: min(260px, 100%); image-rendering: pixelated; }
+  .code .note { font-size: 13px; color: #555; margin-top: 6px; }
+  .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 14px; }
+  .ph { position: relative; border: 0; padding: 0; border-radius: 12px; overflow: hidden; background: var(--line); aspect-ratio: 3/4; cursor: zoom-in; }
+  .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ph span { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,.62); color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 99px; }
+  .nophoto { font-size: 14px; color: var(--muted); margin-top: 12px; }
+  .actions { display: flex; gap: 10px; margin-top: 14px; }
+  .actions .btn { flex: 1; }
+  .empty { text-align: center; padding: 48px 16px; color: var(--muted); }
+
+  /* Barra de baixo */
+  .foot { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+  .foot .in { max-width: 880px; margin: 0 auto; display: flex; gap: 10px; }
+  .foot .btn { flex: 1; }
+
+  /* Foto em tela cheia */
+  .lb { position: fixed; inset: 0; background: #000; z-index: 20; display: flex; flex-direction: column; color: #fff; }
+  .lb-top { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: calc(10px + env(safe-area-inset-top)); }
+  .lb-top .grow { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-btn { background: rgba(255,255,255,.14); color: #fff; border: 0; border-radius: 10px; min-width: 44px; height: 44px; padding: 0 12px; font-weight: 650; cursor: pointer; }
+  .lb-stage { flex: 1; overflow: auto; display: flex; touch-action: pan-x pan-y pinch-zoom; }
+  .lb-stage img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; cursor: zoom-in; }
+  .lb-stage.zoom img { max-width: none; max-height: none; width: 200%; cursor: zoom-out; }
+  .lb-nav { display: flex; gap: 10px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .lb-nav .lb-btn { flex: 1; }
+
+  .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
+    padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px); }
+  @media (min-width: 720px) { .photos { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
+</style>
+</head>
+<body>
+
+<!-- Login -->
+<section id="vLogin" class="wrap hidden">
+  <form class="login" id="fLogin">
+    <h1>Baixa pela web</h1>
+    <p class="muted small" style="margin:4px 0 0">Entre com o mesmo e-mail e senha do app DS Log.</p>
+    <label for="email">E-mail</label>
+    <input id="email" type="email" autocomplete="username" required>
+    <label for="pass">Senha</label>
+    <input id="pass" type="password" autocomplete="current-password" required>
+    <button class="btn primary block" id="bLogin" type="submit">Entrar</button>
+    <div class="err" id="loginErr" role="alert"></div>
+  </form>
+</section>
+
+<!-- Baixa -->
+<section id="vMain" class="wrap hidden">
+  <div class="top">
+    <div class="grow">
+      <h1>Baixa J&amp;T</h1>
+      <div class="muted small" id="who"></div>
+    </div>
+    <button class="btn ghost" id="bReload" title="Atualizar">Atualizar</button>
+    <button class="btn ghost" id="bOut">Sair</button>
+  </div>
+
+  <div class="bar">
+    <select id="selRoute" aria-label="Rota"></select>
+    <label class="chk"><input type="checkbox" id="hideDone"> Esconder baixados</label>
+  </div>
+  <div class="bar" style="display:block">
+    <div class="small"><span class="count" id="cnt">—</span></div>
+    <div class="progress"><i id="prog"></i></div>
+  </div>
+
+  <div id="list"></div>
+</section>
+
+<div class="foot hidden" id="foot">
+  <div class="in">
+    <button class="btn ghost" id="bNext">Próximo</button>
+    <button class="btn primary" id="bAll">Baixar todos</button>
+  </div>
+</div>
+
+<!-- Foto em tela cheia -->
+<div class="lb hidden" id="lb" role="dialog" aria-modal="true" aria-label="Foto">
+  <div class="lb-top">
+    <div class="grow" id="lbTitle"></div>
+    <a class="lb-btn" id="lbOpen" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;text-decoration:none">Original</a>
+    <button class="lb-btn" id="lbClose" aria-label="Fechar">✕</button>
+  </div>
+  <div class="lb-stage" id="lbStage"><img id="lbImg" alt=""></div>
+  <div class="lb-nav">
+    <button class="lb-btn" id="lbPrev">‹ Anterior</button>
+    <button class="lb-btn" id="lbNext">Próxima ›</button>
+  </div>
+</div>
+
+<div class="toast hidden" id="toast" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+const SUPABASE_URL = "https://vnurptfgodijjwedxzsi.supabase.co";
+const SUPABASE_KEY = "sb_publishable_htS27JT7Reh2Zz0Zs30X5A_Pv0M6QnS";
+const BUCKET = "entregas";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let me = null;            // usuário logado
+let items = [];           // pacotes da Baixa (entregues primeiro, depois falhas)
+let currentId = null;     // pacote em destaque
+let lbList = [], lbIdx = 0;
+
+function pref(key, def) { try { const v = localStorage.getItem("baixa." + key); return v == null ? def : JSON.parse(v); } catch { return def; } }
+function savePref(key, v) { try { localStorage.setItem("baixa." + key, JSON.stringify(v)); } catch {} }
+
+function toast(msg, ms = 2600) {
+  const t = $("toast"); t.textContent = msg; t.classList.remove("hidden");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add("hidden"), ms);
+}
+
+function errText(e) {
+  const m = (e && (e.message || e.error_description || e.msg)) || String(e || "");
+  if (/Invalid login credentials/i.test(m)) return "E-mail ou senha errados.";
+  if (/Email not confirmed/i.test(m)) return "Confirme o e-mail (veja sua caixa de entrada) e tente de novo.";
+  if (/JWT|token|session/i.test(m)) return "O login venceu. Entre de novo.";
+  if (/Failed to fetch|NetworkError|network/i.test(m)) return "Sem internet. Confira a conexão e toque em Atualizar.";
+  return m || "Não deu certo. Tente de novo.";
+}
+
+/* ---------- Telas ---------- */
+function show(view) {
+  $("vLogin").classList.toggle("hidden", view !== "login");
+  $("vMain").classList.toggle("hidden", view !== "main");
+  $("foot").classList.toggle("hidden", view !== "main");
+}
+
+$("fLogin").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("loginErr").textContent = ""; $("bLogin").disabled = true; $("bLogin").textContent = "Entrando…";
+  const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("pass").value });
+  $("bLogin").disabled = false; $("bLogin").textContent = "Entrar";
+  if (error) { $("loginErr").textContent = errText(error); return; }
+  $("pass").value = "";
+  await start();
+});
+
+$("bOut").addEventListener("click", async () => { await sb.auth.signOut(); me = null; show("login"); });
+$("bReload").addEventListener("click", () => loadRoute($("selRoute").value, true));
+$("selRoute").addEventListener("change", (e) => { savePref("route", e.target.value); loadRoute(e.target.value); });
+$("hideDone").checked = pref("hideDone", false);
+$("hideDone").addEventListener("change", (e) => { savePref("hideDone", e.target.checked); render(); });
+
+async function start() {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) { show("login"); return; }
+  me = data.session.user;
+  show("main");
+  const { data: perfil } = await sb.from("perfis").select("nome, rota_ativa_id").eq("id", me.id).maybeSingle();
+  $("who").textContent = (perfil && perfil.nome ? perfil.nome + " · " : "") + (me.email || "");
+  await loadRoutes(perfil && perfil.rota_ativa_id);
+}
+
+/* ---------- Rotas ---------- */
+function routeLabel(r, activeId) {
+  const d = r.iniciada_em || r.criado_em;
+  const dt = d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "";
+  const nome = r.nome || "Rota";
+  return (r.id === activeId ? "● " : "") + nome + (dt ? " · " + dt : "") + (r.id === activeId ? " (ativa)" : "");
+}
+
+async function loadRoutes(activeId) {
+  const sel = $("selRoute");
+  sel.innerHTML = "<option>Carregando…</option>";
+  const { data, error } = await sb.from("rotas").select("id, nome, situacao, criado_em, iniciada_em")
+    .eq("dono_id", me.id).eq("excluido", false).order("criado_em", { ascending: false }).limit(30);
+  if (error) { sel.innerHTML = ""; $("list").innerHTML = `<div class="empty">${esc(errText(error))}</div>`; if (/JWT/i.test(error.message)) show("login"); return; }
+  if (!data.length) { sel.innerHTML = "<option>Nenhuma rota na nuvem</option>"; $("list").innerHTML = `<div class="empty">Nenhuma rota sincronizada nesta conta.</div>`; return; }
+  sel.innerHTML = data.map((r) => `<option value="${r.id}">${esc(routeLabel(r, activeId))}</option>`).join("");
+  const saved = pref("route", null);
+  const pick = [activeId, saved].find((id) => id && data.some((r) => r.id === id)) || data[0].id;
+  sel.value = pick;
+  await loadRoute(pick);
+}
+
+async function loadRoute(routeId, manual) {
+  if (!routeId) return;
+  $("list").innerHTML = `<div class="empty">Carregando…</div>`;
+  const [paradas, pacotes, empresas] = await Promise.all([
+    sb.from("paradas").select("id, ordem, endereco, nome_local").eq("rota_id", routeId).eq("excluido", false),
+    sb.from("pacotes").select("id, parada_id, numero, situacao, motivo_falha, recebedor, destinatario, qr_jt, baixa_jt_feita, foto_local, foto_pacote, empresa_id, entregue_em, extra")
+      .eq("rota_id", routeId).eq("excluido", false).in("situacao", ["entregue", "falha"]),
+    sb.from("empresas").select("id, nome, mapeamento_colunas").eq("dono_id", me.id),
+  ]);
+  const err = paradas.error || pacotes.error;
+  if (err) { $("list").innerHTML = `<div class="empty">${esc(errText(err))}</div>`; return; }
+  const stops = new Map((paradas.data || []).map((s) => [s.id, s]));
+  const comp = new Map(((empresas.data) || []).map((e) => [e.id, e]));
+  const list = (pacotes.data || []).map((p) => {
+    const s = stops.get(p.parada_id) || {};
+    const e = comp.get(p.empresa_id);
+    const code = ((e && e.mapeamento_colunas && e.mapeamento_colunas._codigo_baixa) || "barras");
+    return { ...p, ordem: s.ordem ?? 9999, endereco: s.nome_local ? s.nome_local + " · " + (s.endereco || "") : (s.endereco || ""), empresa: e ? e.nome : "", codePref: code === "qr" ? "qr" : "barras", urls: null };
+  });
+  list.sort((a, b) => (a.situacao === b.situacao ? 0 : a.situacao === "entregue" ? -1 : 1) || a.ordem - b.ordem || String(a.numero).localeCompare(String(b.numero)));
+  items = list;
+  currentId = (items.find((p) => !p.baixa_jt_feita) || {}).id || null;
+  render();
+  loadPhotos();
+  if (manual) toast("Atualizado");
+}
+
+/* ---------- Código (mesma regra do app: JtLogic.show) ---------- */
+function barcodeOk(v) { return v.length > 0 && v.length <= 80 && [...v].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 126); }
+function codeOf(p) {
+  const number = String(p.numero || "").trim(), qr = String(p.qr_jt || "").trim();
+  const bars = barcodeOk(number) ? { kind: "barras", content: number } : null;
+  const qrShow = qr ? { kind: "qr", content: qr, fromNumber: false } : number ? { kind: "qr", content: number, fromNumber: true } : null;
+  const first = p.codePref === "qr" && qr ? qrShow : bars;
+  return first || bars || qrShow || { kind: "nenhum", content: "" };
+}
+function codeHtml(p) {
+  const c = codeOf(p);
+  if (c.kind === "nenhum") return "";
+  if (c.kind === "barras") return `<div class="code"><svg class="bc" data-v="${esc(c.content)}"></svg></div>`;
+  let img = "";
+  try { const q = qrcode(0, "M"); q.addData(c.content, "Byte"); q.make(); img = q.createDataURL(8, 2); } catch {}
+  return `<div class="code"><img class="qr" src="${img}" alt="QR Code"><div class="note">${c.fromNumber ? "QR feito com o número do pacote" : "QR da etiqueta"}</div></div>`;
+}
+
+/* ---------- Fotos (bucket "entregas", links assinados de 1 hora) ---------- */
+function photoPaths(p) {
+  const out = [];
+  if (p.foto_pacote) out.push({ path: p.foto_pacote, label: "Foto do pacote" });
+  const locals = [p.foto_local, ...(((p.extra || {}).podPhotoExtraCloud) || [])].filter(Boolean);
+  locals.forEach((path, i) => out.push({ path, label: locals.length === 1 ? "Foto do local" : "Foto do local " + (i + 1) }));
+  return out;
+}
+async function loadPhotos() {
+  const all = [...new Set(items.flatMap((p) => photoPaths(p).map((x) => x.path)))];
+  const urls = {};
+  for (let i = 0; i < all.length; i += 100) {
+    const { data } = await sb.storage.from(BUCKET).createSignedUrls(all.slice(i, i + 100), 3600);
+    (data || []).forEach((d) => { if (d.signedUrl) urls[d.path] = d.signedUrl; });
+  }
+  items.forEach((p) => { p.urls = photoPaths(p).map((x) => ({ ...x, url: urls[x.path] || "" })).filter((x) => x.url); });
+  render();
+}
+
+/* ---------- Lista ---------- */
+function render() {
+  const hide = $("hideDone").checked;
+  const total = items.length, done = items.filter((p) => p.baixa_jt_feita).length;
+  $("cnt").textContent = total ? `${done} de ${total} baixados` : "Nenhum pacote entregue ou com falha";
+  $("prog").style.width = total ? (100 * done / total) + "%" : "0";
+  $("bAll").disabled = !items.some((p) => !p.baixa_jt_feita);
+  $("bNext").disabled = !items.some((p) => !p.baixa_jt_feita);
+
+  const vis = items.filter((p) => !(hide && p.baixa_jt_feita));
+  if (!total) { $("list").innerHTML = `<div class="empty">Esta rota ainda não tem pacotes entregues ou com falha na nuvem.</div>`; return; }
+  if (!vis.length) { $("list").innerHTML = `<div class="empty">Todos os pacotes já tiveram baixa. ✓</div>`; return; }
+
+  let html = "", lastGroup = "";
+  vis.forEach((p) => {
+    const g = p.situacao === "entregue" ? "Entregues" : "Com falha";
+    if (g !== lastGroup) { html += `<div class="group">${g}</div>`; lastGroup = g; }
+    const photos = p.urls === null ? `<div class="nophoto">Carregando fotos…</div>`
+      : p.urls.length ? `<div class="photos">${p.urls.map((u, i) => `<button class="ph" data-p="${p.id}" data-i="${i}" aria-label="${esc(u.label)}"><img loading="lazy" src="${esc(u.url)}" alt=""><span>${esc(u.label)}</span></button>`).join("")}</div>`
+      : `<div class="nophoto">Foto só no celular (não foi para a nuvem).</div>`;
+    const recv = p.situacao === "entregue"
+      ? (p.recebedor ? `Recebido por <b>${esc(p.recebedor)}</b>` : `<span class="muted">Sem nome de quem recebeu</span>`)
+      : `Motivo: <b>${esc(p.motivo_falha || "não informado")}</b>`;
+    html += `<article class="pkg ${p.id === currentId ? "current" : ""} ${p.baixa_jt_feita ? "isdone" : ""}" id="pk-${p.id}">
+      <div class="pkg-head">
+        <div class="grow">
+          <div class="num">${esc(p.numero || "Sem número")}</div>
+          <div class="addr">${esc(p.endereco)}${p.empresa ? " · " + esc(p.empresa) : ""}</div>
+        </div>
+        ${p.baixa_jt_feita ? `<span class="tag baixado">Baixado</span>` : p.situacao === "entregue" ? `<span class="tag ok">Entregue</span>` : `<span class="tag fail">Falha</span>`}
+      </div>
+      <div class="recv">${recv}</div>
+      ${codeHtml(p)}
+      ${photos}
+      <div class="actions">
+        ${p.baixa_jt_feita
+          ? `<button class="btn ghost" data-undo="${p.id}">Desfazer baixa</button>`
+          : `<button class="btn primary" data-done="${p.id}">Baixado</button>`}
+      </div>
+    </article>`;
+  });
+  $("list").innerHTML = html;
+  document.querySelectorAll("svg.bc").forEach((el) => {
+    try { JsBarcode(el, el.dataset.v, { format: "CODE128", width: 2.4, height: 110, fontSize: 18, margin: 6, background: "#ffffff", lineColor: "#000000" }); }
+    catch { el.outerHTML = `<div class="note">Não deu para desenhar o código de barras.</div>`; }
+  });
+}
+
+$("list").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.done) setBaixa([b.dataset.done], true, true);
+  else if (b.dataset.undo) setBaixa([b.dataset.undo], false, false);
+  else if (b.dataset.p) openLb(b.dataset.p, +b.dataset.i);
+});
+
+/* ---------- Baixa ----------
+   Grava como o app grava (SyncCore): baixa_jt_feita + extra.alterado_em (hora da mudança) e
+   extra.campos_em.baixa_jt_feita (hora deste campo), para o celular aceitar a mudança na sincronização. */
+async function setBaixa(ids, value, advance) {
+  const btns = ids.map((id) => document.querySelector(`[data-done="${id}"],[data-undo="${id}"]`)).filter(Boolean);
+  btns.forEach((b) => { b.disabled = true; b.textContent = "Gravando…"; });
+  let fails = 0;
+  for (const id of ids) {
+    const now = Date.now();
+    const cur = await sb.from("pacotes").select("extra").eq("id", id).single();
+    if (cur.error) { fails++; continue; }
+    const extra = { ...(cur.data.extra || {}) };
+    extra.alterado_em = now;
+    extra.campos_em = { ...(extra.campos_em || {}), baixa_jt_feita: now };
+    const up = await sb.from("pacotes").update({ baixa_jt_feita: value, extra }).eq("id", id).select("id");
+    if (up.error || !up.data || !up.data.length) { fails++; continue; }
+    const p = items.find((x) => x.id === id);
+    if (p) { p.baixa_jt_feita = value; p.extra = extra; }
+  }
+  if (fails) toast(fails === 1 ? "Não gravou. Confira a internet e tente de novo." : `${fails} pacotes não gravaram. Tente de novo.`);
+  if (advance && ids.length === 1) {
+    // Mesmo comportamento do app (JtLogic.next): o próximo sem baixa depois deste; senão, antes.
+    const at = items.findIndex((p) => p.id === ids[0]);
+    const nxt = items.slice(at + 1).find((p) => !p.baixa_jt_feita) || items.slice(0, Math.max(at, 0)).find((p) => !p.baixa_jt_feita);
+    currentId = nxt ? nxt.id : null;
+    render();
+    if (nxt) scrollTo(nxt.id); else if (!fails) toast("Todos os pacotes tiveram baixa ✓");
+  } else render();
+}
+
+function scrollTo(id) { const el = $("pk-" + id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+
+$("bNext").addEventListener("click", () => {
+  const at = items.findIndex((p) => p.id === currentId);
+  const nxt = items.slice(at + 1).find((p) => !p.baixa_jt_feita) || items.find((p) => !p.baixa_jt_feita);
+  if (!nxt) return;
+  currentId = nxt.id; render(); scrollTo(nxt.id);
+});
+
+$("bAll").addEventListener("click", () => {
+  const ids = items.filter((p) => !p.baixa_jt_feita).map((p) => p.id);
+  if (!ids.length) return;
+  if (!confirm(`Marcar ${ids.length} ${ids.length === 1 ? "pacote" : "pacotes"} como baixados?`)) return;
+  setBaixa(ids, true, false).then(() => toast("Pacotes marcados como baixados"));
+});
+
+/* ---------- Foto em tela cheia ---------- */
+function openLb(pid, i) {
+  const p = items.find((x) => x.id === pid); if (!p || !p.urls) return;
+  lbList = items.flatMap((x) => (x.urls || []).map((u) => ({ ...u, pkg: x })));
+  lbIdx = Math.max(0, lbList.findIndex((u) => u.pkg.id === pid && u.url === p.urls[i].url));
+  $("lb").classList.remove("hidden"); document.body.style.overflow = "hidden";
+  paintLb();
+}
+function paintLb() {
+  const u = lbList[lbIdx]; if (!u) return;
+  $("lbStage").classList.remove("zoom");
+  $("lbImg").src = u.url; $("lbOpen").href = u.url;
+  $("lbTitle").textContent = `${u.pkg.numero || "Sem número"} · ${u.label} (${lbIdx + 1}/${lbList.length})`;
+  $("lbPrev").disabled = lbIdx === 0; $("lbNext").disabled = lbIdx === lbList.length - 1;
+}
+function closeLb() { $("lb").classList.add("hidden"); document.body.style.overflow = ""; $("lbImg").src = ""; }
+$("lbClose").addEventListener("click", closeLb);
+$("lbPrev").addEventListener("click", () => { if (lbIdx > 0) { lbIdx--; paintLb(); } });
+$("lbNext").addEventListener("click", () => { if (lbIdx < lbList.length - 1) { lbIdx++; paintLb(); } });
+$("lbImg").addEventListener("click", () => $("lbStage").classList.toggle("zoom"));
+document.addEventListener("keydown", (e) => {
+  if ($("lb").classList.contains("hidden")) return;
+  if (e.key === "Escape") closeLb();
+  else if (e.key === "ArrowLeft") $("lbPrev").click();
+  else if (e.key === "ArrowRight") $("lbNext").click();
+});
+let tx = null;
+$("lbStage").addEventListener("touchstart", (e) => { tx = e.touches.length === 1 && !$("lbStage").classList.contains("zoom") ? e.touches[0].clientX : null; }, { passive: true });
+$("lbStage").addEventListener("touchend", (e) => {
+  if (tx == null) return; const dx = e.changedTouches[0].clientX - tx; tx = null;
+  if (Math.abs(dx) > 60) (dx < 0 ? $("lbNext") : $("lbPrev")).click();
+});
+
+sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") show("login"); });
+start().catch((e) => { show("login"); $("loginErr").textContent = errText(e); });
+</script>
+</body>
+</html>
