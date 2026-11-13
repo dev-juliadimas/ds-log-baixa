@@ -114,6 +114,19 @@
 
   .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--fg); color: var(--bg);
     padding: 10px 16px; border-radius: 12px; font-size: 14px; z-index: 30; max-width: calc(100% - 32px); }
+  /* Importar prints (grupo 40) */
+  .drop { display: block; border: 2px dashed var(--line); border-radius: 18px; padding: 28px 16px; text-align: center; cursor: pointer; background: var(--card); }
+  .drop:hover, .drop.over { border-color: var(--accent); }
+  .drop input { display: none; }
+  .pr { background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 10px; box-shadow: var(--shadow); border: 2px solid transparent; }
+  .pr.off { opacity: .55; }
+  .pr-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pr-head .grow { flex: 1; min-width: 0; font-weight: 700; word-break: break-all; }
+  .pr input[type=text] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); margin-top: 8px; }
+  .tag.warn { background: #fff3cd; color: #7a5600; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag.warn { background: #3a3014; color: #ffd36b; } }
+  :root[data-theme="dark"] .tag.warn { background: #3a3014; color: #ffd36b; }
+  .x { background: transparent; border: 0; color: var(--muted); font-size: 14px; cursor: pointer; padding: 8px; min-height: 44px; }
   @media (min-width: 720px) { .photos { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
 </style>
 </head>
@@ -140,6 +153,7 @@
       <h1>Baixa J&amp;T</h1>
       <div class="muted small" id="who"></div>
     </div>
+    <button class="btn" id="bPrints">Importar prints</button>
     <button class="btn ghost" id="bReload" title="Atualizar">Atualizar</button>
     <button class="btn ghost" id="bOut">Sair</button>
   </div>
@@ -155,6 +169,36 @@
 
   <div id="list"></div>
 </section>
+
+<!-- Importar prints (grupo 40) -->
+<section id="vPrints" class="wrap hidden">
+  <div class="top">
+    <div class="grow">
+      <h1>Importar prints</h1>
+      <div class="muted small">Prints da tela Entrega pendente da J&amp;T. A leitura é feita neste navegador: as imagens não saem daqui.</div>
+    </div>
+    <button class="btn ghost" id="bPrBack">Voltar</button>
+  </div>
+  <label class="drop" id="prDrop">
+    <input type="file" id="prFiles" accept="image/*" multiple>
+    <b>Escolher prints</b><br><span class="muted small">Até 20 por vez. Dá para arrastar os arquivos para cá.</span>
+  </label>
+  <div class="bar hidden" id="prBusy" style="display:block;margin-top:14px">
+    <div class="small" id="prBusyText">Lendo…</div>
+    <div class="progress"><i id="prProg"></i></div>
+  </div>
+  <div class="bar hidden" id="prSum" style="margin-top:14px">
+    <span class="count grow" id="prCount"></span>
+    <button class="btn ghost" id="bPrClear">Limpar</button>
+  </div>
+  <div id="prList"></div>
+</section>
+
+<div class="foot hidden" id="prFoot">
+  <div class="in">
+    <button class="btn primary" id="bPrSend" disabled>Enviar para o celular</button>
+  </div>
+</div>
 
 <div class="foot hidden" id="foot">
   <div class="in">
@@ -182,6 +226,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <script>
 const SUPABASE_URL = "https://vnurptfgodijjwedxzsi.supabase.co";
 const SUPABASE_KEY = "sb_publishable_htS27JT7Reh2Zz0Zs30X5A_Pv0M6QnS";
@@ -195,6 +240,7 @@ let me = null;            // usuário logado
 let items = [];           // pacotes da Baixa (entregues primeiro, depois falhas)
 let currentId = null;     // pacote em destaque
 let lbList = [], lbIdx = 0;
+let activeRouteId = null; // rota ativa do perfil (para "Já está na rota" nos prints)
 
 function pref(key, def) { try { const v = localStorage.getItem("baixa." + key); return v == null ? def : JSON.parse(v); } catch { return def; } }
 function savePref(key, v) { try { localStorage.setItem("baixa." + key, JSON.stringify(v)); } catch {} }
@@ -218,6 +264,8 @@ function show(view) {
   $("vLogin").classList.toggle("hidden", view !== "login");
   $("vMain").classList.toggle("hidden", view !== "main");
   $("foot").classList.toggle("hidden", view !== "main");
+  $("vPrints").classList.toggle("hidden", view !== "prints");
+  $("prFoot").classList.toggle("hidden", view !== "prints");
 }
 
 $("fLogin").addEventListener("submit", async (ev) => {
@@ -243,6 +291,9 @@ async function start() {
   show("main");
   const { data: perfil } = await sb.from("perfis").select("nome, rota_ativa_id").eq("id", me.id).maybeSingle();
   $("who").textContent = (perfil && perfil.nome ? perfil.nome + " · " : "") + (me.email || "");
+  activeRouteId = (perfil && perfil.rota_ativa_id) || null;
+  // Grupo 40: lote de prints com mais de 7 dias sai da nuvem (sem a tabela, não faz nada).
+  sb.from("prints_web").delete().lt("criado_em", new Date(Date.now() - 7 * 864e5).toISOString()).then(() => {}, () => {});
   await loadRoutes(perfil && perfil.rota_ativa_id);
 }
 
@@ -298,9 +349,11 @@ async function loadRoute(routeId, manual) {
 /* ---------- Código (mesma regra do app: JtLogic.show) ---------- */
 function barcodeOk(v) { return v.length > 0 && v.length <= 80 && [...v].every((c) => c.charCodeAt(0) >= 32 && c.charCodeAt(0) <= 126); }
 function codeOf(p) {
-  const number = String(p.numero || "").trim(), qr = String(p.qr_jt || "").trim();
+  // Código J&T (fica em extra.jtCode); sem ele, o número do pacote (pacotes antigos guardavam o código no número).
+  const jt = String(((p.extra || {}).jtCode) || "").trim();
+  const number = jt || String(p.numero || "").trim(), qr = String(p.qr_jt || "").trim();
   const bars = barcodeOk(number) ? { kind: "barras", content: number } : null;
-  const qrShow = qr ? { kind: "qr", content: qr, fromNumber: false } : number ? { kind: "qr", content: number, fromNumber: true } : null;
+  const qrShow = qr ? { kind: "qr", content: qr, fromNumber: false } : number ? { kind: "qr", content: number, fromNumber: true, fromJt: !!jt } : null;
   const first = p.codePref === "qr" && qr ? qrShow : bars;
   return first || bars || qrShow || { kind: "nenhum", content: "" };
 }
@@ -310,7 +363,7 @@ function codeHtml(p) {
   if (c.kind === "barras") return `<div class="code"><svg class="bc" data-v="${esc(c.content)}"></svg></div>`;
   let img = "";
   try { const q = qrcode(0, "M"); q.addData(c.content, "Byte"); q.make(); img = q.createDataURL(8, 2); } catch {}
-  return `<div class="code"><img class="qr" src="${img}" alt="QR Code"><div class="note">${c.fromNumber ? "QR feito com o número do pacote" : "QR da etiqueta"}</div></div>`;
+  return `<div class="code"><img class="qr" src="${img}" alt="QR Code"><div class="note">${c.fromJt ? "QR feito com o Código J&amp;T" : c.fromNumber ? "QR feito com o número do pacote" : "QR da etiqueta"}</div></div>`;
 }
 
 /* ---------- Fotos (bucket "entregas", links assinados de 1 hora) ---------- */
@@ -465,6 +518,294 @@ $("lbStage").addEventListener("touchend", (e) => {
   if (tx == null) return; const dx = e.changedTouches[0].clientX - tx; tx = null;
   if (Math.abs(dx) > 60) (dx < 0 ? $("lbNext") : $("lbPrev")).click();
 });
+
+/* ---------- Importar prints da J&T (grupo 40) ----------
+   Mesmas regras do app (JtPrintImport.kt): leitura no navegador (Tesseract.js), conferência rápida e
+   "Enviar para o celular" grava um lote em prints_web; no celular, "Trazer para este celular" põe na conferência. */
+const JtPrint = (() => {
+  const MAX_PRINTS = 20;
+  const CODE = /^\D{0,3}?(\d{12,18})\D{0,3}$/;
+  const DATE = /(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?::\d{2})?/;
+  const CLOCK = /^\d{1,2}:\d{2}.*$/;
+  const CITY_UF_CEP = /([A-Za-zÀ-ÿ'. ]{2,40}?)\s*[-/]\s*(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b\.?\s*(\d{5})[-.\s]?(\d{3})?\s*$/i;
+  const CEP_ONLY = /\b(\d{5})[-.\s]?(\d{3})\s*$/;
+  const IGNORE_WORDS = ["navegacao", "telefone", "whatsapp", "assinar", "numero unico", "inserir", "procurar", "entrega pendente",
+    "dentro de 7 dias", "filtro de data", "roteirizacao", "transferencia", "nsferencia", "entregue"];
+  const TAIL_WORDS = /\s+(navega[çc][ãa]o|telefone|whatsapp|assinar)\s*$/iu;
+  const STREET_START = /^(rua|r\.|av\.?|avenida|travessa|tv\.|rodovia|rod\.|estrada|alameda|pra[çc]a|servid[ãa]o|linha|largo|beco)(\s|$)/iu;
+
+  const plain = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/\p{Mn}+/gu, "");
+  const norm = (s) => plain(s).replace(/[^a-z0-9]+/g, " ").trim();
+
+  function codeOf(row) {
+    const compact = row.replace(/ /g, "");
+    const m = compact.match(CODE);
+    return m && !compact.includes("-") ? m[1] : null;
+  }
+  function ignored(row) {
+    const n = norm(row).replace(/ /g, "");
+    if (n.length < 2 && !/\d/.test(row)) return true;
+    if (CLOCK.test(row.trim()) && !DATE.test(row)) return true;
+    if (!/[\p{L}\p{N}]/u.test(row)) return true;
+    const p = plain(row).replace(/\(\d+\)/g, "").trim();
+    return IGNORE_WORDS.some((w) => p === w || p.startsWith(w + " ") || (p.endsWith(" " + w) && p.length < w.length + 12)) ||
+      p.startsWith("entrega pendente") || p.startsWith("entregue");
+  }
+  const fmtDate = (m) => `${m[1]}-${m[2]}-${m[3]} ${m[4].padStart(2, "0")}:${m[5]}`;
+  const cleanName = (row) => row.replace(/\s+/g, " ").trim();
+  function looksLikeName(row) {
+    if (/\d/.test(row)) return false;
+    const words = row.trim().split(/\s+/);
+    return words.length >= 1 && words.length <= 6 && !STREET_START.test(row.trim());
+  }
+  function dedupRepeat(words) {
+    const low = words.map(norm);
+    for (let k = Math.floor(low.length / 2); k >= 2; k--) {
+      if (low.slice(0, k).join("|") === low.slice(k, 2 * k).join("|")) return words.slice(k);
+    }
+    return words;
+  }
+  /** Endereço da J&T em uma linha → [endereço como o app usa, complemento, completo]. */
+  function address(raw) {
+    let text = raw.replace(/\s+/g, " ").trim();
+    let city = "", uf = "", cep = "";
+    const m = text.match(CITY_UF_CEP);
+    if (m) {
+      const cityRaw = m[1];
+      let dots = -1;
+      for (const d of cityRaw.matchAll(/\.\s*\./g)) dots = d.index + d[0].length - 1;
+      const cut = Math.max(dots, cityRaw.lastIndexOf(","));
+      city = cityRaw.substring(cut + 1).trim().replace(/^[.\s]+|[.\s]+$/g, "");
+      uf = m[2].toUpperCase();
+      cep = m[4] ? `${m[3]}-${m[4]}` : "";
+      text = text.substring(0, m.index + cut + 1);
+    } else {
+      const c = text.match(CEP_ONLY);
+      if (c) { cep = `${c[1]}-${c[2]}`; text = text.substring(0, c.index); }
+    }
+    text = text.trim().replace(/[.,\s-]+$/, "").replace(/\s*\.\s*\.\s*/g, " ").trim();
+    let district = "";
+    const comma = text.lastIndexOf(",");
+    if (comma >= 0) { district = text.substring(comma + 1).trim().replace(/^[.\s]+|[.\s]+$/g, ""); text = text.substring(0, comma).trim(); }
+    const words = dedupRepeat(text.split(" ").filter((w) => w.trim()));
+    const numIdx = words.findIndex((w) => /^\d{1,6}[a-zA-Z]?$/.test(w));
+    let street, number, complement;
+    if (numIdx > 0) { street = words.slice(0, numIdx).join(" "); number = words[numIdx]; complement = words.slice(numIdx + 1).join(" "); }
+    else { street = words.join(" "); number = ""; complement = ""; }
+    const streetPart = number ? `${street}, ${number}` : street;
+    const cityPart = [city, uf].filter(Boolean).join(" - ");
+    const full = [streetPart, district, cityPart, cep].filter((x) => x && x.trim()).join(", ");
+    return [full, complement, !!(street.trim() && number && cep)];
+  }
+  function finish(b) {
+    const [addr, complement, ok] = address(b.addr.join(" "));
+    return { code: b.code, name: b.name, address: addr, complement, time: b.time, incomplete: !ok || !b.closed };
+  }
+  function headless(rows) {
+    if (!rows.length) return null;
+    const dateIdx = rows.findIndex((r) => DATE.test(r));
+    const body = dateIdx >= 0 ? rows.slice(0, dateIdx) : rows;
+    let streetIdx = -1;
+    for (let i = 1; i < body.length; i++) if (STREET_START.test(body[i].trim())) { streetIdx = i; break; }
+    if (streetIdx < 0) return null;
+    const nameIdx = streetIdx - 1;
+    if (!looksLikeName(body[nameIdx])) return null;
+    const addr = body.slice(nameIdx + 1);
+    if (!addr.length) return null;
+    const time = dateIdx >= 0 ? fmtDate(rows[dateIdx].match(DATE)) : "";
+    return finish({ code: "", name: cleanName(body[nameIdx]), addr, time, closed: dateIdx >= 0 });
+  }
+  /** Linhas do OCR ({ text, left, top }) de um print → pacotes, na ordem em que aparecem. */
+  function parse(lines, imageWidth) {
+    const maxLeft = imageWidth > 0 ? imageWidth * 0.62 : Infinity;
+    const rows = lines.filter((l) => l.left < maxLeft)
+      .sort((a, b) => a.top - b.top || a.left - b.left)
+      .map((l) => l.text.trim().replace(TAIL_WORDS, "").trim())
+      .filter((r) => r && !ignored(r));
+    const out = [];
+    let cur = null, seenCode = false;
+    const before = [];
+    for (const row of rows) {
+      const code = codeOf(row);
+      if (code) {
+        if (cur) out.push(finish(cur));
+        if (!seenCode) { const h = headless(before); if (h) out.push(h); seenCode = true; }
+        cur = { code, name: "", addr: [], time: "", closed: false };
+        continue;
+      }
+      if (!seenCode) { before.push(row); continue; }
+      if (!cur || cur.closed) continue;
+      const d = row.match(DATE);
+      if (d) { cur.time = fmtDate(d); cur.closed = true; continue; }
+      if (!cur.name) cur.name = cleanName(row); else cur.addr.push(row);
+    }
+    if (cur) out.push(finish(cur));
+    if (!seenCode) { const h = headless(before); if (h) out.push(h); }
+    return out;
+  }
+  const score = (e) => (e.incomplete ? 0 : 1000) + (e.time ? 500 : 0) + e.address.length + e.name.length;
+  /** Vários prints: mesmo código = um só (fica o mais completo); sem código, mesmo nome e endereço. */
+  function merge(entries) {
+    const out = [];
+    for (const e of entries) {
+      const i = out.findIndex((o) => (e.code || o.code) ? (e.code && e.code === o.code) : (norm(o.name) === norm(e.name) && norm(o.address) === norm(e.address)));
+      if (i < 0) out.push(e); else if (score(e) > score(out[i])) out[i] = e;
+    }
+    const withCode = out.filter((e) => e.code);
+    return out.filter((e) => !(!e.code && withCode.some((w) => norm(w.name) === norm(e.name) && (norm(w.address) === norm(e.address) || e.incomplete))));
+  }
+  /** Endereço digitado de novo: completo com rua, número e CEP (como no print). */
+  function complete(addr) {
+    const t = String(addr || "");
+    return /\b\d{5}-?\d{3}\b/.test(t) && /[a-zA-ZÀ-ÿ]{3,}.*?,\s*\d{1,6}[a-zA-Z]?\b/.test(t);
+  }
+  return { MAX_PRINTS, parse, merge, complete, norm };
+})();
+
+let prItems = [];          // pacotes lidos dos prints, à espera de "Enviar para o celular"
+let prRouteCodes = new Set();
+let prWorker = null;
+
+function prShow() { show("prints"); prRender(); prLoadRouteCodes(); }
+$("bPrints").addEventListener("click", prShow);
+$("bPrBack").addEventListener("click", () => { show("main"); });
+$("bPrClear").addEventListener("click", () => {
+  if (prItems.length && !confirm("Limpar os pacotes lidos? Eles ainda não foram enviados.")) return;
+  prItems = []; prRender();
+});
+
+async function prLoadRouteCodes() {
+  const routeId = activeRouteId || $("selRoute").value;
+  if (!routeId) return;
+  const { data } = await sb.from("pacotes").select("numero, jt:extra->>jtCode").eq("rota_id", routeId).eq("excluido", false);
+  prRouteCodes = new Set((data || []).flatMap((p) => [p.jt, p.numero]).map((x) => String(x || "").trim()).filter(Boolean));
+  let changed = false;
+  prItems.forEach((p) => { const inR = !!p.code && prRouteCodes.has(p.code); if (inR && !p.inRoute) { p.inRoute = true; p.selected = false; changed = true; } });
+  if (changed) prRender();
+}
+
+$("prFiles").addEventListener("change", (e) => { prRead([...e.target.files]); e.target.value = ""; });
+const drop = $("prDrop");
+["dragenter", "dragover"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", (e) => prRead([...e.dataTransfer.files].filter((f) => f.type.startsWith("image/"))));
+
+function imgWidth(file) {
+  return new Promise((ok) => {
+    const url = URL.createObjectURL(file); const im = new Image();
+    im.onload = () => { URL.revokeObjectURL(url); ok(im.naturalWidth); };
+    im.onerror = () => { URL.revokeObjectURL(url); ok(0); };
+    im.src = url;
+  });
+}
+
+async function prRead(files) {
+  if (!files.length) return;
+  const list = files.slice(0, JtPrint.MAX_PRINTS);
+  if (files.length > list.length) toast(`Até ${JtPrint.MAX_PRINTS} prints por vez: li os primeiros ${list.length}`);
+  if (!navigator.onLine && !prWorker) { toast("Sem internet: o leitor dos prints precisa ser baixado. Confira a conexão."); return; }
+  $("prBusy").classList.remove("hidden"); $("prFiles").disabled = true;
+  const setBusy = (t, f) => { $("prBusyText").textContent = t; $("prProg").style.width = (100 * f) + "%"; };
+  const entries = []; let unreadable = 0;
+  try {
+    if (!prWorker) { setBusy("Preparando o leitor (só na primeira vez)…", 0); prWorker = await Tesseract.createWorker("por"); }
+    for (let i = 0; i < list.length; i++) {
+      setBusy(`Lendo print ${i + 1} de ${list.length}…`, i / list.length);
+      try {
+        const w = await imgWidth(list[i]);
+        const { data } = await prWorker.recognize(list[i]);
+        const lines = (data.lines || []).map((l) => ({ text: l.text, left: l.bbox.x0, top: l.bbox.y0 }));
+        const e = JtPrint.parse(lines, w);
+        if (!e.length) unreadable++;
+        entries.push(...e);
+      } catch { unreadable++; }
+    }
+    setBusy("Pronto", 1);
+  } catch (e) {
+    toast("Não deu para preparar o leitor dos prints. Confira a internet e tente de novo.", 4000);
+    prWorker = null;
+    return;
+  } finally {
+    $("prBusy").classList.add("hidden"); $("prFiles").disabled = false;
+  }
+  const merged = JtPrint.merge(entries);
+  // O que já estava na lista continua; código repetido não entra de novo.
+  const oldCodes = new Set(prItems.map((p) => p.code).filter(Boolean));
+  const oldKeys = new Set(prItems.map((p) => JtPrint.norm(p.name) + "|" + JtPrint.norm(p.address)));
+  const fresh = merged.filter((e) => e.code ? !oldCodes.has(e.code) : !oldKeys.has(JtPrint.norm(e.name) + "|" + JtPrint.norm(e.address)));
+  fresh.forEach((e, i) => {
+    const inRoute = !!e.code && prRouteCodes.has(e.code);
+    prItems.push({ ...e, id: Date.now() + "-" + i + "-" + Math.random().toString(36).slice(2, 7), selected: !inRoute, inRoute });
+  });
+  prRender();
+  if (!fresh.length && !prItems.length) { toast("Nenhum pacote encontrado nos prints. Use prints da tela Entrega pendente da J&T.", 4000); return; }
+  const parts = [fresh.length === 1 ? "1 pacote novo" : `${fresh.length} pacotes novos`];
+  if (unreadable) parts.push(unreadable === 1 ? "1 print sem pacotes" : `${unreadable} prints sem pacotes`);
+  toast(parts.join(" · "));
+}
+
+function prRender() {
+  const sel = prItems.filter((p) => p.selected).length;
+  $("prSum").classList.toggle("hidden", !prItems.length);
+  const warn = prItems.filter((p) => p.selected && (p.incomplete || !p.code)).length;
+  $("prCount").textContent = `${sel} de ${prItems.length} marcados` + (warn ? ` · ${warn} para conferir no celular` : "");
+  $("bPrSend").disabled = !sel;
+  $("bPrSend").textContent = sel ? `Enviar ${sel} para o celular` : "Enviar para o celular";
+  if (!prItems.length) { $("prList").innerHTML = `<div class="empty">Escolha os prints para ler os pacotes.</div>`; return; }
+  $("prList").innerHTML = prItems.map((p) => `<article class="pr ${p.selected ? "" : "off"}" data-id="${p.id}">
+    <div class="pr-head">
+      <label class="chk"><input type="checkbox" data-f="selected" ${p.selected ? "checked" : ""} aria-label="Marcar"></label>
+      <div class="grow">${p.code ? esc(p.code) : `<span class="tag warn">Sem código</span>`}</div>
+      ${p.inRoute ? `<span class="tag baixado">Já está na rota</span>` : ""}
+      ${p.incomplete ? `<span class="tag warn">Endereço incompleto</span>` : ""}
+      ${p.time ? `<span class="muted small">${esc(p.time.replace(/(\d{4})-(\d{2})-(\d{2}) /, "$3/$2/$1 "))}</span>` : ""}
+      <button class="x" data-rm="${p.id}" aria-label="Remover">Remover</button>
+    </div>
+    <input type="text" data-f="name" value="${esc(p.name)}" placeholder="Nome do cliente" aria-label="Nome do cliente">
+    <input type="text" data-f="address" value="${esc(p.address)}" placeholder="Endereço (rua, número, bairro, cidade - UF, CEP)" aria-label="Endereço">
+    <input type="text" data-f="complement" value="${esc(p.complement)}" placeholder="Complemento (apto, bloco, sala)" aria-label="Complemento">
+  </article>`).join("");
+}
+
+$("prList").addEventListener("change", (ev) => {
+  const card = ev.target.closest(".pr"); const f = ev.target.dataset.f; if (!card || !f) return;
+  const p = prItems.find((x) => x.id === card.dataset.id); if (!p) return;
+  if (f === "selected") p.selected = ev.target.checked;
+  else {
+    const v = ev.target.value.trim();
+    if (f === "address" && v !== p.address) p.incomplete = !JtPrint.complete(v);
+    p[f] = v;
+  }
+  prRender();
+});
+$("prList").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-rm]"); if (!b) return;
+  prItems = prItems.filter((p) => p.id !== b.dataset.rm); prRender();
+});
+
+$("bPrSend").addEventListener("click", async () => {
+  const send = prItems.filter((p) => p.selected);
+  if (!send.length) return;
+  if (!navigator.onLine) { toast("Sem internet. Nada foi enviado; confira a conexão e tente de novo."); return; }
+  const btn = $("bPrSend"); btn.disabled = true; btn.textContent = "Enviando…";
+  const itens = send.map((p) => ({ code: p.code, name: p.name, address: p.address, complement: p.complement, time: p.time, incomplete: !!p.incomplete }));
+  let error = null;
+  for (let i = 0; i < itens.length && !error; i += 400) {
+    ({ error } = await sb.from("prints_web").insert({ itens: itens.slice(i, i + 400) }));
+  }
+  if (error) {
+    prRender();
+    const m = String(error.message || "");
+    toast(/prints_web|relation|schema cache/i.test(m) ? "Falta aplicar o SQL dos prints no Supabase." : errText(error), 4500);
+    return;
+  }
+  const ids = new Set(send.map((p) => p.id));
+  prItems = prItems.filter((p) => !ids.has(p.id));
+  prRender();
+  toast(`${send.length === 1 ? "1 pacote enviado" : send.length + " pacotes enviados"}. No celular, toque em Trazer para este celular.`, 5000);
+});
+
+window.addEventListener("beforeunload", (e) => { if (prItems.some((p) => p.selected)) { e.preventDefault(); e.returnValue = ""; } });
 
 sb.auth.onAuthStateChange((event) => { if (event === "SIGNED_OUT") show("login"); });
 start().catch((e) => { show("login"); $("loginErr").textContent = errText(e); });
